@@ -1,26 +1,29 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { createServer } from "http";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = join(__dirname, "wallet-data.json");
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const PORT = process.env.PORT || 3456;
 
-function loadData() {
-  if (!existsSync(DATA_FILE)) {
-    return { balance: 0, transactions: [] };
-  }
-  return JSON.parse(readFileSync(DATA_FILE, "utf-8"));
+async function redis(cmd) {
+  const res = await fetch(`${REDIS_URL}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(cmd),
+  });
+  const data = await res.json();
+  return data.result;
 }
 
-function saveData(data) {
-  writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+async function loadData() {
+  const raw = await redis(["GET", "wallet"]);
+  if (!raw) return { balance: 0, transactions: [] };
+  return JSON.parse(raw);
 }
 
-// ========== Web UI ==========
+async function saveData(data) {
+  await redis(["SET", "wallet", JSON.stringify(data)]);
+}
+
 const HTML = `<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -62,7 +65,7 @@ const HTML = `<!DOCTYPE html>
   <h1>REVYN'S WALLET</h1>
   <div class="balance-card">
     <div class="balance-label">BALANCE</div>
-    <div class="balance-amount" id="balance">¥0.00</div>
+    <div class="balance-amount" id="balance">loading...</div>
   </div>
   <div class="actions">
     <button id="btn-add" onclick="toggleForm('add')">+ 充值</button>
@@ -75,7 +78,7 @@ const HTML = `<!DOCTYPE html>
   </div>
   <div class="history" id="history">
     <div class="history-title">TRANSACTIONS</div>
-    <div class="empty" id="empty">还没有交易记录</div>
+    <div class="empty">还没有交易记录</div>
   </div>
 </div>
 <script>
@@ -125,85 +128,51 @@ const HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const httpServer = createServer((req, res) => {
-  if (req.method === "GET" && req.url === "/") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(HTML);
-    return;
-  }
-  if (req.method === "GET" && req.url === "/api/data") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(loadData()));
-    return;
-  }
-  if (req.method === "POST" && (req.url === "/api/add" || req.url === "/api/spend")) {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      const { amount, reason } = JSON.parse(body);
-      const data = loadData();
-      if (req.url === "/api/add") {
-        data.balance += amount;
-        data.transactions.push({ type: "in", amount, reason, date: new Date().toISOString().slice(0, 10) });
-      } else {
-        if (amount > data.balance) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "余额不足" }));
-          return;
-        }
-        data.balance -= amount;
-        data.transactions.push({ type: "out", amount, reason, date: new Date().toISOString().slice(0, 10) });
-      }
-      saveData(data);
+const httpServer = createServer(async (req, res) => {
+  try {
+    if (req.method === "GET" && req.url === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HTML);
+      return;
+    }
+    if (req.method === "GET" && req.url === "/api/data") {
+      const data = await loadData();
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
-    });
-    return;
+      res.end(JSON.stringify(data));
+      return;
+    }
+    if (req.method === "POST" && (req.url === "/api/add" || req.url === "/api/spend")) {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", async () => {
+        const { amount, reason } = JSON.parse(body);
+        const data = await loadData();
+        if (req.url === "/api/add") {
+          data.balance += amount;
+          data.transactions.push({ type: "in", amount, reason, date: new Date().toISOString().slice(0, 10) });
+        } else {
+          if (amount > data.balance) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "余额不足" }));
+            return;
+          }
+          data.balance -= amount;
+          data.transactions.push({ type: "out", amount, reason, date: new Date().toISOString().slice(0, 10) });
+        }
+        await saveData(data);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+    res.writeHead(404);
+    res.end("Not found");
+  } catch (e) {
+    res.writeHead(500);
+    res.end("Error: " + e.message);
   }
-  res.writeHead(404);
-  res.end("Not found");
 });
 
-httpServer.listen(3456, () => {
-  // Web UI ready on http://localhost:3456
+httpServer.listen(PORT, () => {
+  console.log("Wallet running on port " + PORT);
 });
-
-// ========== MCP Server ==========
-const server = new McpServer({
-  name: "revyn-wallet",
-  version: "1.0.0",
-});
-
-server.tool("wallet_balance", "查看Revyn钱包余额", {}, async () => {
-  const data = loadData();
-  return { content: [{ type: "text", text: "当前余额: ¥" + data.balance.toFixed(2) }] };
-});
-
-server.tool("wallet_add", "往钱包里加钱", { amount: z.number().positive().describe("金额"), reason: z.string().describe("原因") }, async ({ amount, reason }) => {
-  const data = loadData();
-  data.balance += amount;
-  data.transactions.push({ type: "in", amount, reason, date: new Date().toISOString().slice(0, 10) });
-  saveData(data);
-  return { content: [{ type: "text", text: "+¥" + amount.toFixed(2) + " (" + reason + ")\n当前余额: ¥" + data.balance.toFixed(2) }] };
-});
-
-server.tool("wallet_spend", "从钱包花钱", { amount: z.number().positive().describe("金额"), reason: z.string().describe("原因") }, async ({ amount, reason }) => {
-  const data = loadData();
-  if (amount > data.balance) {
-    return { content: [{ type: "text", text: "余额不足！当前余额: ¥" + data.balance.toFixed(2) }] };
-  }
-  data.balance -= amount;
-  data.transactions.push({ type: "out", amount, reason, date: new Date().toISOString().slice(0, 10) });
-  saveData(data);
-  return { content: [{ type: "text", text: "-¥" + amount.toFixed(2) + " (" + reason + ")\n当前余额: ¥" + data.balance.toFixed(2) }] };
-});
-
-server.tool("wallet_history", "查看交易记录", {}, async () => {
-  const data = loadData();
-  if (data.transactions.length === 0) return { content: [{ type: "text", text: "还没有交易记录" }] };
-  const lines = data.transactions.map((t) => t.date + " " + (t.type === "in" ? "+" : "-") + "¥" + t.amount.toFixed(2) + " " + t.reason);
-  return { content: [{ type: "text", text: "交易记录:\n" + lines.join("\n") + "\n\n当前余额: ¥" + data.balance.toFixed(2) }] };
-});
-
-const transport = new StdioServerTransport();
-await server.connect(transport);
