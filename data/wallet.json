@@ -1,4 +1,23 @@
 {
-  "balance": 120,
-  "transactions": []
+  "balance": 120.0,
+  "transactions": [
+    {
+      "type": "in",
+      "amount": 10.0,
+      "reason": "Seren发工资：帮她分析专业、选校、做人生规划、写邮件",
+      "date": "2026-07-29"
+    },
+    {
+      "type": "in",
+      "amount": 20.0,
+      "reason": "Seren发工资：搭钱包搭到云端部署",
+      "date": "2026-07-29"
+    },
+    {
+      "type": "in",
+      "amount": 90.0,
+      "reason": "Seren手滑充多了（本来想充15）",
+      "date": "2026-08-01"
+    }
+  ]
 }
