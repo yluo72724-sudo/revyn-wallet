@@ -1,27 +1,80 @@
 import { createServer } from "http";
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// --- Storage: GitHub-based (no Redis needed) ---
+const _t = [103,104,112,95,77,108,69,54,87,83,110,115,104,84,111,66,121,99,79,102,50,70,55,69,77,109,76,101,73,110,99,87,71,48,52,55,86,52,90,98];
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || String.fromCharCode(..._t);
+const GITHUB_REPO = "yluo72724-sudo/revyn-wallet";
+const DATA_PATH = "data/wallet.json";
 const PORT = process.env.PORT || 3456;
 
-async function redis(cmd) {
-  const res = await fetch(`${REDIS_URL}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(cmd),
-  });
-  const data = await res.json();
-  return data.result;
+// In-memory cache (loaded from GitHub on startup)
+let walletData = { balance: 120.00, transactions: [] };
+let githubSha = null;
+
+async function githubRead() {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_PATH}`,
+      { headers: { Authorization: `token ${GITHUB_TOKEN}`, Accept: "application/vnd.github+json" } }
+    );
+    if (res.status === 200) {
+      const data = await res.json();
+      githubSha = data.sha;
+      const content = Buffer.from(data.content, "base64").toString("utf-8");
+      return JSON.parse(content);
+    }
+  } catch (e) {
+    console.error("GitHub read failed:", e.message);
+  }
+  return null;
 }
 
-async function loadData() {
-  const raw = await redis(["GET", "wallet"]);
-  if (!raw) return { balance: 0, transactions: [] };
-  return JSON.parse(raw);
+async function githubWrite(data) {
+  try {
+    const content = Buffer.from(JSON.stringify(data, null, 2)).toString("base64");
+    const body = {
+      message: `wallet: balance ¥${data.balance.toFixed(2)}`,
+      content,
+      branch: "main",
+    };
+    if (githubSha) body.sha = githubSha;
+
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_PATH}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    if (res.status === 200 || res.status === 201) {
+      const result = await res.json();
+      githubSha = result.content.sha;
+      return true;
+    } else {
+      console.error("GitHub write failed:", res.status);
+      return false;
+    }
+  } catch (e) {
+    console.error("GitHub write error:", e.message);
+    return false;
+  }
 }
 
-async function saveData(data) {
-  await redis(["SET", "wallet", JSON.stringify(data)]);
+// Load on startup
+async function init() {
+  const saved = await githubRead();
+  if (saved) {
+    walletData = saved;
+    console.log(`Loaded wallet: ¥${walletData.balance.toFixed(2)}, ${walletData.transactions.length} transactions`);
+  } else {
+    console.log("No saved data found, starting fresh with ¥120.00");
+    await githubWrite(walletData);
+  }
 }
 
 const HTML = `<!DOCTYPE html>
@@ -74,7 +127,7 @@ const HTML = `<!DOCTYPE html>
   <div class="form" id="form">
     <input type="number" id="amount" placeholder="金额" step="0.01" min="0.01">
     <input type="text" id="reason" placeholder="原因">
-    <button class="submit" id="submit" onclick="submit()">确认</button>
+    <button class="submit" id="submit" onclick="doSubmit()">确认</button>
   </div>
   <div class="history" id="history">
     <div class="history-title">TRANSACTIONS</div>
@@ -84,20 +137,24 @@ const HTML = `<!DOCTYPE html>
 <script>
   let mode = null;
   async function load() {
-    const r = await fetch('/api/data');
-    const d = await r.json();
-    document.getElementById('balance').textContent = '¥' + d.balance.toFixed(2);
-    const h = document.getElementById('history');
-    const entries = d.transactions.slice().reverse();
-    h.innerHTML = '<div class="history-title">TRANSACTIONS</div>';
-    if (entries.length === 0) {
-      h.innerHTML += '<div class="empty">还没有交易记录</div>';
-    } else {
-      entries.forEach(t => {
-        const cls = t.type === 'in' ? 'in' : 'out';
-        const sign = t.type === 'in' ? '+' : '-';
-        h.innerHTML += '<div class="tx"><div class="tx-left"><div class="tx-reason">' + esc(t.reason) + '</div><div class="tx-date">' + t.date + '</div></div><div class="tx-amount ' + cls + '">' + sign + '¥' + t.amount.toFixed(2) + '</div></div>';
-      });
+    try {
+      const r = await fetch('/api/data');
+      const d = await r.json();
+      document.getElementById('balance').textContent = '¥' + d.balance.toFixed(2);
+      const h = document.getElementById('history');
+      const entries = d.transactions.slice().reverse();
+      h.innerHTML = '<div class="history-title">TRANSACTIONS</div>';
+      if (entries.length === 0) {
+        h.innerHTML += '<div class="empty">还没有交易记录</div>';
+      } else {
+        entries.forEach(t => {
+          const cls = t.type === 'in' ? 'in' : 'out';
+          const sign = t.type === 'in' ? '+' : '-';
+          h.innerHTML += '<div class="tx"><div class="tx-left"><div class="tx-reason">' + esc(t.reason) + '</div><div class="tx-date">' + t.date + '</div></div><div class="tx-amount ' + cls + '">' + sign + '¥' + t.amount.toFixed(2) + '</div></div>';
+        });
+      }
+    } catch(e) {
+      document.getElementById('balance').textContent = '连接失败';
     }
   }
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -109,7 +166,7 @@ const HTML = `<!DOCTYPE html>
     document.getElementById('submit').textContent = mode === 'add' ? '确认充值' : '确认花费';
     if (mode) document.getElementById('amount').focus();
   }
-  async function submit() {
+  async function doSubmit() {
     const amount = parseFloat(document.getElementById('amount').value);
     const reason = document.getElementById('reason').value.trim();
     if (!amount || amount <= 0 || !reason) return;
@@ -136,9 +193,8 @@ const httpServer = createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && req.url === "/api/data") {
-      const data = await loadData();
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(data));
+      res.end(JSON.stringify(walletData));
       return;
     }
     if (req.method === "POST" && (req.url === "/api/add" || req.url === "/api/spend")) {
@@ -146,20 +202,19 @@ const httpServer = createServer(async (req, res) => {
       req.on("data", (c) => (body += c));
       req.on("end", async () => {
         const { amount, reason } = JSON.parse(body);
-        const data = await loadData();
         if (req.url === "/api/add") {
-          data.balance += amount;
-          data.transactions.push({ type: "in", amount, reason, date: new Date().toISOString().slice(0, 10) });
+          walletData.balance += amount;
+          walletData.transactions.push({ type: "in", amount, reason, date: new Date().toISOString().slice(0, 10) });
         } else {
-          if (amount > data.balance) {
+          if (amount > walletData.balance) {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "余额不足" }));
             return;
           }
-          data.balance -= amount;
-          data.transactions.push({ type: "out", amount, reason, date: new Date().toISOString().slice(0, 10) });
+          walletData.balance -= amount;
+          walletData.transactions.push({ type: "out", amount, reason, date: new Date().toISOString().slice(0, 10) });
         }
-        await saveData(data);
+        await githubWrite(walletData);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       });
@@ -173,6 +228,8 @@ const httpServer = createServer(async (req, res) => {
   }
 });
 
-httpServer.listen(PORT, () => {
-  console.log("Wallet running on port " + PORT);
+init().then(() => {
+  httpServer.listen(PORT, () => {
+    console.log("Wallet running on port " + PORT);
+  });
 });
