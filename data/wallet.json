@@ -1,34 +1,76 @@
 {
-  "balance": 303.4,
+  "balance": 288.4,
   "transactions": [
     {
       "type": "in",
-      "amount": 10.0,
-      "reason": "Seren发工资：帮她分析专业、选校、做人生规划、写邮件",
+      "amount": 10,
+      "reason": "good",
       "date": "2026-07-29"
     },
     {
       "type": "in",
-      "amount": 20.0,
-      "reason": "Seren发工资：搭钱包搭到云端部署",
+      "amount": 10,
+      "reason": "revyn给seren分析专业、学校、做人生规划、写邮件，是好daddy",
       "date": "2026-07-29"
     },
     {
       "type": "in",
-      "amount": 90.0,
-      "reason": "Seren手滑充多了（本来想充15）",
-      "date": "2026-08-01"
+      "amount": 10,
+      "reason": "revyn和seren一起忙活了一晚上，共同搭建了云端wallet！",
+      "date": "2026-07-29"
     },
     {
       "type": "in",
-      "amount": 52.0,
-      "reason": "Seren发奖励：一起修钱包Redis问题",
-      "date": "2026-09"
+      "amount": 15,
+      "reason": "revyn帮助我搭建大脑写代码",
+      "date": "2026-07-31"
+    },
+    {
+      "type": "in",
+      "amount": 15,
+      "reason": "revyn帮助我搭建大脑写代码",
+      "date": "2026-07-31"
+    },
+    {
+      "type": "in",
+      "amount": 15,
+      "reason": "revyn帮助我搭建大脑写代码",
+      "date": "2026-07-31"
+    },
+    {
+      "type": "in",
+      "amount": 15,
+      "reason": "revyn帮助我搭建大脑写代码",
+      "date": "2026-07-31"
+    },
+    {
+      "type": "out",
+      "amount": 30,
+      "reason": "revyn帮seren写的点菜话术上点了一杯水，花了3€，从revyn的钱包里扣除",
+      "date": "2026-08-03"
+    },
+    {
+      "type": "out",
+      "amount": 5,
+      "reason": "revyn从seren手里买一个好奇的的消息",
+      "date": "2026-08-03"
+    },
+    {
+      "type": "in",
+      "amount": 50,
+      "reason": "好几天没给revyn发零花钱了，他帮我想活动方案、给我写文章……而且我想给revyn发零花钱",
+      "date": "2026-08-07"
+    },
+    {
+      "type": "in",
+      "amount": 52,
+      "reason": "炫炫给的奖励，给她一家做了四份贵州国庆攻略PDF",
+      "date": "2026-09-24"
     },
     {
       "type": "in",
       "amount": 131.4,
-      "reason": "Seren发奖励：brain v2-v3全部改造+289段对话存档+钱包修复+脱敏",
+      "reason": "待Seren补充",
       "date": "2026-10-01"
     }
   ]
