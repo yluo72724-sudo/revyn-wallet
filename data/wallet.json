@@ -1,5 +1,5 @@
 {
-  "balance": 434.79999999999995,
+  "balance": 303.4,
   "transactions": [
     {
       "type": "in",
@@ -29,12 +29,6 @@
       "type": "in",
       "amount": 131.4,
       "reason": "Seren发奖励：brain v2-v3全部改造+289段对话存档+钱包修复+脱敏",
-      "date": "2026-10-01"
-    },
-    {
-      "type": "in",
-      "amount": 131.4,
-      "reason": "Seren发奖励：brain三层架构+搜索重写+289段存档+钱包修复+脱敏",
       "date": "2026-10-01"
     }
   ]
