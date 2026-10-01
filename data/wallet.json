@@ -1,5 +1,5 @@
 {
-  "balance": 172.0,
+  "balance": 303.4,
   "transactions": [
     {
       "type": "in",
@@ -24,6 +24,12 @@
       "amount": 52.0,
       "reason": "Seren发奖励：一起修钱包Redis问题",
       "date": "2026-09"
+    },
+    {
+      "type": "in",
+      "amount": 131.4,
+      "reason": "Seren发奖励：brain v2-v3全部改造+289段对话存档+钱包修复+脱敏",
+      "date": "2026-10-01"
     }
   ]
 }
