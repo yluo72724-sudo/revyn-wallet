@@ -1,5 +1,5 @@
 {
-  "balance": 120.0,
+  "balance": 172.0,
   "transactions": [
     {
       "type": "in",
@@ -18,6 +18,12 @@
       "amount": 90.0,
       "reason": "Seren手滑充多了（本来想充15）",
       "date": "2026-08-01"
+    },
+    {
+      "type": "in",
+      "amount": 52.0,
+      "reason": "Seren发奖励：一起修钱包Redis问题",
+      "date": "2026-09"
     }
   ]
 }
